@@ -1,48 +1,100 @@
 #include<stdio.h>
 #include<stdlib.h>
-
-//definitions for socket functions and API to create sockets
+#include<ws2tcpip.h>
 #include<sys/types.h>
-#include<sys/socket.h>
+#include<winsock2.h>
+#include<time.h>
 
-//to store address information under net_inet
-#include<netinet/in.h>
+#pragma comment(lib,"ws2_32.lib")
 
-int main(){
+int main()
+{
+    char message[1000], server_reply[1000];
 
-    //create a socket
-    int network_socket;
-    //domain, type-connection socket(tcp), explicitly specify the socket in case of raw sockets
-    network_socket=socket(AF_INET, SOCK_STREAM, 0);
+    time_t t;
+    time(&t);
 
-    //specify the address to connect to
-    struct sockaddr_in server_address;
-    server_address.sin_family=AF_INET;
-    //convert an u_short from host to network byte order(which is big endian)
-    server_address.sin_port=htons(9002);
-    //IP address
-    //using shortcut
-    //s.addr is a field holding the address(the real server address)
-    server_address.sin_addr.s_addr=INADDR_ANY;
 
-    //connect the socket(0-okay)
-    //cast our server_address structure to a slightly different structure
-    int connection_status=connect(network_socket, (struct sockaddr*)&server_address, sizeof(server_address));
-    //check for error with the connection
-    if(connection_status==-1){
-        printf("There was an error making a connection to the remote socket\n\n");
+    //to initialize winsock
+    WSADATA wsa;
+    printf("\nInitialising Winsock...\n");
+    if (WSAStartup(MAKEWORD(2,2),&wsa) != 0)
+    {
+        printf("Failed. Error Code : %d",WSAGetLastError());
+        return 1;
+    }
+    printf("Initialised at %s \n",ctime(&t));
+    printf("\n");
+
+    //1.create a socket
+    int network_sock;
+    if((network_sock = socket(AF_INET , SOCK_STREAM , 0 )) == INVALID_SOCKET)
+    {
+        printf("Could not create socket : %d" , WSAGetLastError());
     }
 
-    //receiving data
-    //socket, place to hold the data we get back from the server, size
-    char server_response[256];
-    recv(network_socket, &server_response, sizeof(server_response),0);
+    printf("Socket created at %s \n",ctime(&t));
+    printf("\n");
 
-    //print the data we get back from the server
-    printf("The server sent the data:%s", server_response);
+
+    //2.define server ip-address and port
+    struct sockaddr_in server_addr;
+    server_addr.sin_family=AF_INET;
+    server_addr.sin_port=htons(9002);
+    //server_addr.sin_addr.s_addr=INADDR_ANY;
+    server_addr.sin_addr.s_addr=inet_addr("127.0.0.1");
+
+    //3.connect to server socket on local host
+    int connection_status=connect(network_sock, (SOCKADDR * )&server_addr, sizeof(server_addr));
+
+    if(connection_status == SOCKET_ERROR)
+    {
+        printf("Could not connect socket : %d" , WSAGetLastError());
+        connection_status = closesocket(network_sock);
+        if (connection_status == SOCKET_ERROR)
+            printf("Closesocket function failed with error: %ld\n", WSAGetLastError());
+        WSACleanup();
+        return 1;
+    }
+
+    printf("\nConnected to server!\n");
+
+    //4. enter into a send/receive infinite loop with server
+    while(1)
+    {
+        printf("\nEnter message to be sent to server : \n");
+        scanf("%s" , message);
+
+        //send entered message
+        if(send(network_sock, message , strlen(message) , 0) < 0)
+        {
+            printf("\nSend failed\n");
+            return 1;
+        }
+
+        //receive a reply from the server
+        if(recv(network_sock , server_reply , 1000 , 0) < 0)
+        {
+            printf("\nRecieving of the message has failed\n");
+            break;
+        }
+
+        printf("\nReply received from Server at: %s \n",ctime(&t));
+        puts(server_reply);
+    }
+
+    /*
+    //sending or receiving data from a server - only once
+    char server_resp[260];
+    recv(network_sock, server_resp, sizeof(server_resp),0);
+
+    //printing out the data
+    printf("\nThe data received from server:%s\n",server_resp);
+    */
+
 
     //close the socket
-    close(network_socket);
-
+    closesocket(network_sock);
+    WSACleanup();
     return 0;
 }
